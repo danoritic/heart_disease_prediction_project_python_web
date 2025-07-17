@@ -1,0 +1,179 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+        <div class="card shadow-sm mb-4">
+            <div class="card-header bg-primary text-white">
+                <h2 class="h5 mb-0"><i class="fas fa-calculator me-2"></i>Heart Disease Risk Assessment</h2>
+            </div>
+            <div class="card-body">
+                <form id="prediction-form" method="POST" action="/predict">
+                    <div class="row">
+                        {% for field in input_fields %}
+                        <div class="col-md-6 mb-3">
+                            <label for="{{ field.name }}" class="form-label">
+                                {{ field.label }}{% if field.type == 'number' or field.type == 'select' %}*{% endif %}
+                            </label>
+                            
+                            {% if field.type == 'number' %}
+                            <div class="input-group">
+                                <input type="number" class="form-control" id="{{ field.name }}" 
+                                    name="{{ field.name }}" min="{{ field.min }}" max="{{ field.max }}" 
+                                    required step="any">
+                                {% if field.unit %}
+                                <span class="input-group-text">{{ field.unit }}</span>
+                                {% endif %}
+                            </div>
+                            
+                            {% elif field.type == 'select' %}
+                            <select class="form-select" id="{{ field.name }}" name="{{ field.name }}" required>
+                                <option value="" disabled selected>Select option</option>
+                                {% for value, text in field.options %}
+                                <option value="{{ value }}">{{ text }}</option>
+                                {% endfor %}
+                            </select>
+                            {% endif %}
+                        </div>
+                        {% endfor %}
+                    </div>
+                    
+                    <div class="d-grid mt-4">
+                        <button type="submit" class="btn btn-primary btn-lg">
+                            <i class="fas fa-heart-pulse me-2"></i>Predict Heart Disease Risk
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <div id="results-container" class="card shadow-sm d-none">
+            <div class="card-header bg-success text-white">
+                <h2 class="h5 mb-0"><i class="fas fa-chart-bar me-2"></i>Prediction Results</h2>
+            </div>
+            <div class="card-body">
+                <div class="alert alert-info">
+                    <i class="fas fa-info-circle me-2"></i>
+                    Results below show predictions from multiple machine learning models
+                </div>
+                
+                <div class="row" id="model-results">
+                    <!-- Results will be populated here by JavaScript -->
+                </div>
+                
+                <div class="mt-4">
+                    <h5 class="mb-3">Risk Explanation</h5>
+                    <div class="row">
+                        <div class="col-md-4">
+                            <div class="card border-success border-2 mb-3">
+                                <div class="card-body text-center">
+                                    <span class="badge bg-success mb-2">Low Risk</span>
+                                    <p class="mb-0">Probability &lt; 30%</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="card border-warning border-2 mb-3">
+                                <div class="card-body text-center">
+                                    <span class="badge bg-warning mb-2">Moderate Risk</span>
+                                    <p class="mb-0">Probability 30% - 70%</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="card border-danger border-2 mb-3">
+                                <div class="card-body text-center">
+                                    <span class="badge bg-danger mb-2">High Risk</span>
+                                    <p class="mb-0">Probability &gt; 70%</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.getElementById('prediction-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    
+    // Show loading state
+    const submitBtn = e.target.querySelector('button[type="submit"]');
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Processing...';
+    
+    try {
+        const formData = new FormData(e.target);
+        const response = await fetch('/predict', {
+            method: 'POST',
+            body: formData
+        });
+        
+        const result = await response.json();
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = '<i class="fas fa-heart-pulse me-2"></i>Predict Heart Disease Risk';
+        
+        if (result.success) {
+            displayResults(result.predictions);
+        } else {
+            alert(`Error: ${result.error}`);
+        }
+    } catch (error) {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = '<i class="fas fa-heart-pulse me-2"></i>Predict Heart Disease Risk';
+        alert('An error occurred. Please try again.');
+    }
+});
+
+function displayResults(predictions) {
+    const container = document.getElementById('results-container');
+    const resultsContainer = document.getElementById('model-results');
+    
+    // Clear previous results
+    resultsContainer.innerHTML = '';
+    
+    // Generate result cards
+    for (const [model, data] of Object.entries(predictions)) {
+        const percentage = Math.round(data.probability * 100);
+        
+        const card = document.createElement('div');
+        card.className = 'col-md-6 col-lg-4 mb-4';
+        card.innerHTML = `
+            <div class="card h-100 shadow-sm">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h6 class="mb-0">${model}</h6>
+                    <span class="badge" style="background-color: ${data.risk_color}">${data.risk_level} Risk</span>
+                </div>
+                <div class="card-body">
+                    <div class="d-flex align-items-center mb-3">
+                        <div class="progress flex-grow-1" style="height: 20px;">
+                            <div class="progress-bar" 
+                                role="progressbar" 
+                                style="width: ${percentage}%; background-color: ${data.risk_color}" 
+                                aria-valuenow="${percentage}" 
+                                aria-valuemin="0" 
+                                aria-valuemax="100">
+                            </div>
+                        </div>
+                        <span class="ms-3 fw-bold">${percentage}%</span>
+                    </div>
+                    <div class="small">
+                        <div><i class="fas fa-check-circle me-2"></i>Accuracy: ${(data.accuracy * 100).toFixed(1)}%</div>
+                        <div class="mt-1"><i class="fas fa-user me-2"></i>Prediction: ${data.prediction === 1 ? 'Heart Disease' : 'No Heart Disease'}</div>
+                    </div>
+                </div>
+            </div>
+        `;
+        resultsContainer.appendChild(card);
+    }
+    
+    // Show results container
+    container.classList.remove('d-none');
+    
+    // Scroll to results
+    container.scrollIntoView({ behavior: 'smooth' });
+}
+</script>
+{% endblock %}

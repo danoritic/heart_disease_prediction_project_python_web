@@ -38,3 +38,6 @@ tzdata
 # ==2025.2
 xgboost
 # ==3.0.2
+flask
+seaborn
+# flask numpy matplotlib seaborn typing
